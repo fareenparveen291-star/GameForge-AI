@@ -1,0 +1,16 @@
+{
+  "name": "gameforge-ai-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Beginner-friendly AI game code generator using a server-side Gemini API connection",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
