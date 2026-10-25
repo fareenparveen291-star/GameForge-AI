@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>GameForge AI v2</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#151e31;--line:#2b3954;--text:#edf3ff;--muted:#a7b6d0;--accent:#8bd4ff}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(140deg,#0b1020,#111b2e);color:var(--text);font:16px system-ui,Arial,sans-serif}
+main{max-width:1050px;margin:auto;padding:18px}.hero{padding:18px 0 8px}.tag{color:var(--accent);font-size:.8rem;letter-spacing:.12em;font-weight:800}.hero h1{margin:.35rem 0;font-size:clamp(2rem,6vw,3rem)}p{line-height:1.5}.muted{color:var(--muted)}.panel{background:#151e31eF;border:1px solid var(--line);border-radius:16px;padding:16px;margin:14px 0}
+label{display:block;font-weight:700;margin:12px 0 7px}select,textarea,input,button{font:inherit}select,textarea,input{width:100%;padding:12px;border:1px solid #394965;border-radius:10px;background:#0c1424;color:var(--text)}textarea{min-height:125px;resize:vertical}
+button{border:0;border-radius:10px;padding:12px 15px;font-weight:800;cursor:pointer;background:var(--accent);color:#081323}button:disabled{opacity:.55;cursor:wait}.secondary{background:#263752;color:var(--text);border:1px solid #3b506f}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}.status{padding:10px;border-radius:10px;background:#0b1424;border:1px solid var(--line);white-space:pre-wrap}.hidden{display:none}.filetabs{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.filetab{background:#25334b;color:var(--text);padding:8px 10px}.filetab.active{background:var(--accent);color:#081323}pre{white-space:pre;overflow:auto;max-height:440px;background:#080d17;border:1px solid var(--line);border-radius:10px;padding:13px;font-size:13px}iframe{width:100%;height:360px;border:1px solid var(--line);border-radius:10px;background:white}.small{font-size:.88rem}.grid{display:grid;grid-template-columns:1fr;gap:14px}@media(min-width:760px){.grid{grid-template-columns:1fr 1fr}}ul{padding-left:22px}.warning{border-left:4px solid #f2c46d;padding-left:12px}.footer{padding:16px 0 30px;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="tag">YOUR GAME-BUILDING WORKSHOP</div>
+    <h1>🎮 GameForge AI <span style="color:#8bd4ff">v2</span></h1>
+    <p class="muted">Describe your game. AI generates project files. Browser games can be previewed here; Unity scripts need Unity Editor testing.</p>
+  </header>
+
+  <section class="panel">
+    <label for="platform">Choose project type</label>
+    <select id="platform"><option value="browser">Browser game (HTML/CSS/JavaScript)</option><option value="unity">Unity project (C# scripts)</option></select>
+    <label for="prompt">Describe your game</label>
+    <textarea id="prompt" maxlength="4000" placeholder="Example: Make a 2D platform game with a player, platforms, coins, score, restart button and mobile touch controls. Use simple shapes and no external assets."></textarea>
+    <div class="actions"><button id="generate">✨ Generate with real AI</button><button class="secondary" id="example">Use example prompt</button></div>
+    <p class="muted small">AI responses may contain mistakes. Never paste passwords or private information into prompts.</p>
+    <div id="status" class="status" role="status" aria-live="polite">Ready. Generate requires a configured server-side AI key.</div>
+  </section>
+
+  <section id="output" class="panel hidden">
+    <h2 id="projectName">Generated project</h2>
+    <p id="summary"></p>
+    <div class="filetabs" id="filetabs"></div>
+    <div class="actions">
+      <button class="secondary" id="copyFile">Copy selected file</button>
+      <button class="secondary" id="downloadFile">Download selected file</button>
+      <button class="secondary" id="downloadAll">Download all files as text</button>
+    </div>
+    <h3 id="fileTitle">Selected file</h3>
+    <pre><code id="code"></code></pre>
+    <div id="previewArea">
+      <h3>Browser preview</h3>
+      <p class="muted small">Preview runs generated HTML inside a sandboxed frame. If the game needs external files, this preview may not fully work.</p>
+      <iframe id="preview" sandbox="allow-scripts" title="Generated browser game preview"></iframe>
+      <div class="actions"><button class="secondary" id="refreshPreview">Refresh preview</button></div>
+    </div>
+    <div class="grid">
+      <div><h3>Run steps</h3><ul id="runSteps"></ul></div>
+      <div><h3>Test checklist</h3><ul id="tests"></ul></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>🛠️ Ask AI to fix an error</h2>
+    <p class="muted small">Paste a short relevant code file and the exact error. The AI suggests corrected files; it does not run Unity or guarantee the fix.</p>
+    <label for="errorText">Error message</label><textarea id="errorText" placeholder="Paste the exact browser console or Unity Console error"></textarea>
+    <label for="errorCode">Relevant code</label><textarea id="errorCode" placeholder="Paste the code that produced the error"></textarea>
+    <button id="fix">🧩 Explain and suggest a fix</button>
+    <div id="fixStatus" class="status" style="margin-top:10px">No fix request yet.</div>
+    <div id="fixResult" class="hidden"><h3>AI fix suggestion</h3><pre><code id="fixOutput"></code></pre></div>
+  </section>
+  <p class="warning small">Security: keep the API key in your host's server-side Secrets/Environment Variables. Never put it in this HTML file or upload it to a public repository.</p>
+  <footer class="footer">GameForge AI v2 • Learning prototype • Code is AI-generated and must be reviewed and tested.</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let currentFiles = [];
+let activeFile = 0;
+let lastPlatform = "browser";
+
+$("example").addEventListener("click", () => {
+  $("prompt").value = $("platform").value === "unity"
+    ? "Create a simple Unity 3D island exploration starter with a player movement script, camera follow script, day-night cycle script and clear setup instructions. Use Unity built-in components and no paid assets."
+    : "Create a complete 2D platform game in one HTML file with keyboard controls and mobile touch buttons, platforms, coins, score, simple shapes, restart button and no external assets.";
+});
+$("platform").addEventListener("change", () => {
+  if ($("prompt").value.trim()) return;
+  $("example").click();
+});
+
+function showStatus(message, isError=false) {
+  $("status").textContent = message;
+  $("status").style.borderColor = isError ? "#d97777" : "var(--line)";
+}
+function showList(id, items) {
+  const el = $(id); el.replaceChildren();
+  (items || []).forEach(item => { const li = document.createElement("li"); li.textContent = item; el.appendChild(li); });
+}
+function renderFiles(data) {
+  currentFiles = data.files || []; activeFile = 0;
+  $("projectName").textContent = data.projectName || "Generated project";
+  $("summary").textContent = data.summary || "";
+  const tabs = $("filetabs"); tabs.replaceChildren();
+  currentFiles.forEach((file, i) => {
+    const b = document.createElement("button");
+    b.className = "filetab" + (i === activeFile ? " active" : "");
+    b.textContent = file.name;
+    b.addEventListener("click", () => { activeFile = i; renderSelected(); });
+    tabs.appendChild(b);
+  });
+  showList("runSteps", data.runSteps);
+  showList("tests", data.tests);
+  $("output").classList.remove("hidden");
+  renderSelected();
+}
+function renderSelected() {
+  const file = currentFiles[activeFile]; if (!file) return;
+  $("fileTitle").textContent = file.name + " · " + (file.language || "text");
+  $("code").textContent = file.code || "";
+  [...$("filetabs").children].forEach((b, i) => b.classList.toggle("active", i === activeFile));
+  const htmlFile = currentFiles.find(f => f.name.toLowerCase() === "index.html" && /html/i.test(f.language + f.name));
+  const isBrowser = $("platform").value === "browser" && htmlFile;
+  $("previewArea").classList.toggle("hidden", !isBrowser);
+  if (isBrowser) $("preview").srcdoc = htmlFile.code;
+}
+async function apiPost(url, body) {
+  const response = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return data;
+}
+$("generate").addEventListener("click", async () => {
+  const prompt = $("prompt").value.trim();
+  if (prompt.length < 8) return showStatus("Pehle game ka prompt thoda detail mein likho.", true);
+  const platform = $("platform").value; lastPlatform = platform;
+  $("generate").disabled = true; showStatus("AI se code ban raha hai… ismein kuch waqt lag sakta hai.");
+  try {
+    const data = await apiPost("/api/generate", {prompt, platform});
+    renderFiles(data);
+    showStatus("AI ne files generate kar di. Ab code review karo aur tests chalao.");
+    $("output").scrollIntoView({behavior:"smooth", block:"start"});
+  } catch (e) { showStatus("Error: " + e.message, true); }
+  finally { $("generate").disabled = false; }
+});
+$("copyFile").addEventListener("click", async () => {
+  const file = currentFiles[activeFile]; if (!file) return;
+  try { await navigator.clipboard.writeText(file.code); showStatus("Selected file ka code copy ho gaya."); }
+  catch { showStatus("Clipboard access nahi mila. Code box se manually copy karo.", true); }
+});
+$("downloadFile").addEventListener("click", () => {
+  const file = currentFiles[activeFile]; if (!file) return;
+  const blob = new Blob([file.code], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); URL.revokeObjectURL(a.href);
+});
+$("downloadAll").addEventListener("click", () => {
+  if (!currentFiles.length) return;
+  const text = currentFiles.map(f => "===== " + f.name + " =====\n" + f.code).join("\n\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type:"text/plain;charset=utf-8"})); a.download = "GameForge-generated-files.txt"; a.click(); URL.revokeObjectURL(a.href);
+});
+$("refreshPreview").addEventListener("click", () => renderSelected());
+$("fix").addEventListener("click", async () => {
+  const code = $("errorCode").value.trim(), error = $("errorText").value.trim();
+  if (!code || !error) { $("fixStatus").textContent = "Code aur exact error message dono bharna zaroori hai."; return; }
+  $("fix").disabled = true; $("fixStatus").textContent = "AI error ko analyze kar raha hai…";
+  try {
+    const data = await apiPost("/api/fix", {code, error, platform: lastPlatform});
+    const lines = [];
+    lines.push("SUMMARY: " + (data.summary || ""));
+    (data.files || []).forEach(f => lines.push("\nFILE: " + f.name + "\n" + f.code));
+    if (data.runSteps?.length) lines.push("\nRUN STEPS:\n- " + data.runSteps.join("\n- "));
+    if (data.tests?.length) lines.push("\nTESTS:\n- " + data.tests.join("\n- "));
+    $("fixOutput").textContent = lines.join("\n");
+    $("fixResult").classList.remove("hidden");
+    $("fixStatus").textContent = "Fix suggestion aa gaya. Apply karne se pehle code review karo.";
+  } catch (e) { $("fixStatus").textContent = "Error: " + e.message; }
+  finally { $("fix").disabled = false; }
+});
+</script>
+</body>
+</html>
