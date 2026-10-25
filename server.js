@@ -12,12 +12,10 @@ app.get('/api/test', (req,res)=>{
 
 app.post('/api/generate', async (req,res)=>{
   try{
-    const userIdea = req.body.prompt || req.body.genre || "fun arcade game";
+    const userIdea = req.body.prompt || "fun game";
     const apiKey = process.env.GEMINI_API_KEY;
-    if(!apiKey) return res.status(500).json({error:'GEMINI_API_KEY missing in Render'});
-
-    const promptText = `Create playable HTML5 game for: ${userIdea}. Return ONLY JSON like {"title":"...","description":"...","html":"<html>...</html>"} html must be full playable game with canvas. No markdown.`;
-
+    if(!apiKey) return res.status(500).json({error:'API key missing'});
+    const promptText = `Make playable HTML5 game: ${userIdea}. Return ONLY JSON {"title":"","description":"","html":"<html>...</html>"}`;
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -29,11 +27,9 @@ app.post('/api/generate', async (req,res)=>{
     const j = JSON.parse(t);
     res.json(j);
   }catch(e){
-    console.error(e);
-    res.status(500).json({error:'AI failed', details:e.message});
+    res.status(500).json({error:e.message});
   }
 });
 
-app.get('*',(req,res)=>{ res.sendFile(path.join(__dirname,'index.html')); });
-
+app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
 app.listen(PORT,()=>console.log('Live '+PORT));
